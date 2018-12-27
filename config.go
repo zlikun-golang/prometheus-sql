@@ -99,19 +99,25 @@ func validateConfig(c *Config) error {
 	return nil
 }
 
+// 校验查询配置
 func validateQuery(q *Query) error {
+	// 1) 查询名称，非空
 	if q.Name == "" {
 		return errors.New("Query is not named")
 	}
+	// 2) 驱动（来自数据源），非空
 	if q.Driver == "" {
 		return fmt.Errorf("No data source or driver is specified for query [%s]", q.Name)
 	}
+	// 3) 查询SQL，非空
 	if q.SQL == "" {
 		return fmt.Errorf("SQL statement required for query [%s]", q.Name)
 	}
+	// 4) 超时时间，非空，通过跟踪源码可知，这里的超时时间是指HTTP请求超时时间
 	if q.Timeout == 0 {
 		return fmt.Errorf("Timeout must be greater than zero for query [%s]", q.Name)
 	}
+	// 5) 间隔时间，非空
 	if q.Interval == 0 {
 		return fmt.Errorf("Interval must be greater than zero for query [%s]", q.Name)
 	}
@@ -119,6 +125,7 @@ func validateQuery(q *Query) error {
 	return nil
 }
 
+// 加载配置文件，解析YAML格式配置，返回全局配置和数据源列表
 func loadConfig(file string) (*Config, error) {
 	log.Printf("Load config from file [%s]", file)
 	b, err := ioutil.ReadFile(file)
@@ -142,6 +149,7 @@ func loadConfig(file string) (*Config, error) {
 	return &c, err
 }
 
+// 加载查询配置文件
 func loadQueryConfig(queriesFile string, config *Config) (QueryList, error) {
 	log.Printf("Load queries from file [%s]", queriesFile)
 	// Read queries for request body.
@@ -154,6 +162,7 @@ func loadQueryConfig(queriesFile string, config *Config) (QueryList, error) {
 	return decodeQueries(file, config)
 }
 
+// 解码查询文件（拆分查询配置文件中所有的查询项），返回结构化的查询对象列表
 func decodeQueries(r io.Reader, config *Config) (QueryList, error) {
 	if config == nil {
 		return nil, errors.New("Bug! Config must not be nil")
@@ -174,9 +183,11 @@ func decodeQueries(r io.Reader, config *Config) (QueryList, error) {
 	for _, data := range parsedQueries {
 		for k, q := range data {
 			q.Name = k
+			// 数据源，空则使用默认数据源
 			if q.DataSourceRef == "" {
 				q.DataSourceRef = config.Defaults.DataSourceRef
 			}
+			// 驱动，默认则使用数据源驱动
 			if q.Driver == "" {
 				if q.DataSourceRef != "" && len(config.DataSources) > 0 {
 					var ds = config.DataSources[q.DataSourceRef]
@@ -184,15 +195,20 @@ func decodeQueries(r io.Reader, config *Config) (QueryList, error) {
 					q.Connection = ds.Properties
 				}
 			}
+			// 间隔时间，空则使用默认查询间隔时间
 			if q.Interval == 0 {
 				q.Interval = config.Defaults.QueryInterval
 			}
+			// 超时时间，空则使用默认超时时间
 			if q.Timeout == 0 {
 				q.Timeout = config.Defaults.QueryTimeout
 			}
+			// 值错误替代值，空则使用默认替代值
 			if q.ValueOnError == "" && config.Defaults.QueryValueOnError != "" {
 				q.ValueOnError = config.Defaults.QueryValueOnError
 			}
+			// data-field
+			// sub-metrics，会被自动解析了一个 map ，并通过结构体别名与 SubMetrics 绑定
 			q.DataField = strings.ToLower(q.DataField)
 			if err := validateQuery(q); err != nil {
 				return nil, err
